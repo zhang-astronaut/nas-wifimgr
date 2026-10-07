@@ -1,0 +1,170 @@
+:root {
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --fg: #1c2024;
+  --muted: #6b7280;
+  --line: #e3e6ea;
+  --accent: #2563eb;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --err: #dc2626;
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a; --card: #1c1f25; --fg: #e8eaed; --muted: #9aa3af;
+    --line: #2a2f37; --accent: #5b9bff; --ok: #37c46b; --warn: #e5a13a;
+    --err: #f05c5c;
+  }
+}
+* { box-sizing: border-box; }
+/* [hidden] 靠 UA 样式表的 display:none 实现，任何显式 display 都会覆盖它。
+   .modal / .overlay 都带 display:flex，所以必须在这里显式兜底，
+   否则 JS 里 element.hidden = true 不会隐藏元素（表现为遮罩关不掉）。 */
+[hidden] { display: none !important; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--fg); font-size: 15px; line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 14px; }
+
+/* 顶栏 */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--card); border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+.topbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.topbar h1 { font-size: 17px; margin: 0; font-weight: 600; }
+.status-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; padding: 5px 11px; border-radius: 999px;
+  background: var(--bg); border: 1px solid var(--line); max-width: 60vw;
+}
+.status-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.status-chip[data-state="ok"] .dot { background: var(--ok); }
+.status-chip[data-state="warn"] .dot { background: var(--warn); }
+.status-chip[data-state="err"] .dot { background: var(--err); }
+.status-chip[data-state="loading"] .dot { background: var(--accent); animation: pulse 1.1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+
+/* 卡片 */
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px; margin: 14px 0;
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.card-head h2 { font-size: 15px; margin: 0; font-weight: 600; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.pad { padding: 12px 2px; }
+
+/* 按钮 */
+.btn {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px 14px; font-size: 14px; cursor: pointer;
+  font-family: inherit; min-height: 40px;
+}
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.ghost { background: transparent; }
+.btn.sm { padding: 5px 10px; min-height: 32px; font-size: 13px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* 网络列表 */
+.netlist { list-style: none; margin: 0; padding: 0; }
+.net {
+  display: flex; align-items: center; gap: 10px; padding: 11px 4px;
+  border-top: 1px solid var(--line); cursor: pointer;
+}
+.net:first-child { border-top: none; }
+.net:active { background: var(--bg); }
+.net .bars { display: flex; align-items: flex-end; gap: 2px; height: 18px; flex: none; }
+.net .bars i { width: 3px; background: var(--line); border-radius: 1px; display: block; }
+.net .bars i.on { background: var(--ok); }
+.net .bars i.on.mid { background: var(--warn); }
+.net .bars i.on.weak { background: var(--err); }
+.net .meta { flex: 1; min-width: 0; }
+.net .ssid { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net .sub { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+.badge {
+  font-size: 11px; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); flex: none;
+}
+.badge.on { color: var(--ok); border-color: var(--ok); }
+.badge.saved { color: var(--accent); border-color: var(--accent); }
+.badge.wpa3 { color: var(--warn); border-color: var(--warn); }
+.badge.open { color: var(--err); border-color: var(--err); }
+
+/* 键值表 */
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; word-break: break-all; }
+
+/* 守护面板 */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 12px; color: var(--muted); }
+input[type="text"], input[type="number"], input[type="password"] {
+  background: var(--bg); border: 1px solid var(--line); color: var(--fg);
+  border-radius: 10px; padding: 9px 11px; font-size: 15px; font-family: inherit; width: 100%;
+}
+input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.row { display: flex; align-items: center; gap: 9px; font-size: 14px; margin: 10px 0; }
+.row input { width: auto; }
+label { font-size: 13px; color: var(--muted); display: block; margin: 10px 0 4px; }
+
+/* 事件 / 自检 */
+.events, .checks { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.events li, .checks li { padding: 7px 0; border-top: 1px solid var(--line); display: flex; gap: 9px; }
+.events li:first-child, .checks li:first-child { border-top: none; }
+.lvl {
+  flex: none; width: 46px; font-size: 11px; text-transform: uppercase;
+  color: var(--muted); letter-spacing: .03em;
+}
+.lvl.warn { color: var(--warn); } .lvl.error { color: var(--err); }
+.checks .ok { color: var(--ok); } .checks .no { color: var(--err); }
+.ev-time { color: var(--muted); flex: none; font-variant-numeric: tabular-nums; }
+
+/* 弹窗 */
+.modal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+.modal-box {
+  position: relative; background: var(--card); border-radius: var(--radius);
+  padding: 18px; width: 100%; max-width: 420px; border: 1px solid var(--line);
+}
+.modal-box h3 { margin: 0 0 2px; font-size: 16px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+.err { color: var(--err); }
+
+/* 遮罩（切换网络） */
+.overlay {
+  position: fixed; inset: 0; z-index: 80; display: flex; align-items: center;
+  justify-content: center; background: rgba(0,0,0,.5);
+}
+.overlay-box { text-align: center; color: #fff; }
+.spinner {
+  width: 34px; height: 34px; margin: 0 auto 14px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.3); border-top-color: #fff;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg) } }
+
+/* toast */
+.toast-wrap { position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; z-index: 90; display: flex; flex-direction: column; gap: 8px; width: calc(100% - 28px); max-width: 460px; }
+.toast {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 11px 13px; font-size: 14px; box-shadow: 0 6px 22px rgba(0,0,0,.16);
+  animation: rise .18s ease-out;
+}
+.toast.err { border-color: var(--err); } .toast.ok { border-color: var(--ok); }
+@keyframes rise { from { opacity: 0; transform: translateY(8px) } }
+
+@media (max-width: 560px) {
+  .grid2 { grid-template-columns: 1fr; }
+  .kv { grid-template-columns: 1fr; gap: 2px; }
+  .kv dt { margin-top: 6px; font-size: 12px; }
+}

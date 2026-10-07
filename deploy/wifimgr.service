@@ -1,0 +1,67 @@
+[Unit]
+Description=WiFi Manager (stdlib HTTP control plane + keepalive guardian)
+Documentation=file:///opt/wifimgr/README.md
+After=NetworkManager.service
+Wants=NetworkManager.service
+# 刻意不用 Requires=：NM 挂了 wifimgr 仍应能提供只读诊断页
+# StartLimitIntervalSec 属于 [Unit]（systemd 243），0 = 不限制重启次数
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# nmcli 的写操作需要 root。实测非 root 下 polkit 在无桌面环境无法弹认证代理，
+# 会退化成 insufficient privileges。
+User=root
+Group=root
+WorkingDirectory=/opt/wifimgr
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/opt/wifimgr
+ExecStart=/usr/bin/python3 -B -m wifimgr --config /etc/wifimgr.json serve
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+# 注意：StartLimitIntervalSec 在 systemd 243 上属于 [Unit] 段，不接受在 [Service]，
+# 写错会被忽略并打 "Unknown key name" 警告。
+
+RuntimeDirectory=wifimgr
+RuntimeDirectoryMode=0700
+StateDirectory=wifimgr
+StateDirectoryMode=0700
+UMask=0077
+
+# --- 安全加固（Ubuntu 20.04 systemd 243 全部支持）---
+NoNewPrivileges=yes
+# 不用 PrivateTmp：我们自己管 /run/wifimgr 的临时文件
+PrivateTmp=no
+ProtectSystem=full
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/var/lib/wifimgr /run/wifimgr /etc/NetworkManager/system-connections
+SystemCallArchitectures=native
+# AF_NETLINK 是必须的：iw 通过 netlink 与内核对话，缺了它
+# `iw dev wlan0 link` 会静默失败 -> 信号强度与 BSSID 永远拿不到。
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+# DevicePolicy=closed 时必须显式允许 /dev/wlan0
+DeviceAllow=/dev/wlan0 rw
+
+# --- 资源上限（本机 931MB RAM 且已有 3 个容器在跑）---
+MemoryMax=96M
+MemoryHigh=64M
+CPUWeight=20
+Nice=5
+IOSchedulingClass=idle
+TasksMax=64
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wifimgr
+
+[Install]
+WantedBy=multi-user.target

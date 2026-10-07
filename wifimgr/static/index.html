@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>WiFi 管理</title>
+<link rel="stylesheet" href="/wifi/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <h1>WiFi 管理</h1>
+    <div class="status-chip" id="statusChip" data-state="loading">
+      <span class="dot"></span><span id="statusText">读取中…</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- 状态卡片 -->
+  <section class="card" id="statusCard">
+    <div class="card-head"><h2>当前连接</h2><button class="btn ghost sm" id="btnRefreshStatus">刷新</button></div>
+    <div class="kv" id="statusBody"><p class="muted">读取中…</p></div>
+  </section>
+
+  <!-- 扫描列表 -->
+  <section class="card">
+    <div class="card-head">
+      <h2>周围网络</h2>
+      <button class="btn" id="btnScan">刷新</button>
+    </div>
+    <div id="scanMeta" class="muted small"></div>
+    <ul class="netlist" id="netList">
+      <li class="muted pad">尚未扫描</li>
+    </ul>
+  </section>
+
+  <!-- 已保存 -->
+  <section class="card">
+    <div class="card-head"><h2>已保存的网络</h2></div>
+    <ul class="netlist" id="savedList">
+      <li class="muted pad">加载中…</li>
+    </ul>
+    <p class="muted small">
+      密码保存在 NetworkManager 的 keyfile 里（<code>/etc/NetworkManager/system-connections</code>，权限 0600），
+      本应用数据库不存储任何密码。
+    </p>
+  </section>
+
+  <!-- 守护 -->
+  <section class="card">
+    <div class="card-head"><h2>守护保活</h2><button class="btn ghost sm" id="btnSaveDaemon">保存</button></div>
+    <div id="daemonBody"></div>
+  </section>
+
+  <!-- 事件 -->
+  <section class="card">
+    <div class="card-head"><h2>事件</h2></div>
+    <ul class="events" id="eventList"><li class="muted pad">暂无</li></ul>
+  </section>
+
+  <!-- 自检 -->
+  <section class="card">
+    <div class="card-head"><h2>环境自检</h2><button class="btn ghost sm" id="btnDoctor">运行</button></div>
+    <ul class="checks" id="doctorList"></ul>
+  </section>
+</main>
+
+<!-- 密码输入弹窗 -->
+<div class="modal" id="pwdModal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="pwdTitle">
+    <h3 id="pwdTitle">连接网络</h3>
+    <p class="muted small" id="pwdSSID"></p>
+    <form id="pwdForm">
+      <label for="pwdInput">密码</label>
+      <input type="password" id="pwdInput" autocomplete="off" autocapitalize="off"
+             autocorrect="off" spellcheck="false" inputmode="text">
+      <p class="err small" id="pwdErr" hidden></p>
+      <label class="row">
+        <input type="checkbox" id="pwdRemember" checked>
+        <span>保存此网络（下次一键连接）</span>
+      </label>
+      <label class="row">
+        <input type="checkbox" id="pwdLockBssid">
+        <span>锁定 BSSID（只连这一个信号源）</span>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" data-close>取消</button>
+        <button type="submit" class="btn primary" id="pwdSubmit">连接</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="overlay-box">
+    <div class="spinner"></div>
+    <p id="overlayText">正在切换网络…</p>
+    <p class="small muted">网络切换过程中 SSH 不受影响（本机走 eth0）</p>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script src="/wifi/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+
+# 测试产物
+/tests/__pycache__/
+
+# 运行时数据（含数据库，绝不入库）
+*.db
+*.db-wal
+*.db-shm
+/data/
+/var/
+
+# 部署备份（.bak-YYYYMMDD）
+*.bak-*
+
+# 凭据类文件 —— 双重保险：即使有人手滑把配置拷进来也不会提交
+*.nmconnection
+/etc/wifimgr.json.local
+*.secret
+*.key
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# 日志
+*.log

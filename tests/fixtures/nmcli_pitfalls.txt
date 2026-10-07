@@ -1,0 +1,11 @@
+# 实测坑位记录 (NAS 192.168.31.47, NM 1.22.10)
+# 1. nmcli -g A,B,C dev show IFACE  -> rc=2 直接失败。-g 只支持单字段。
+# 2. nmcli -t -f A,B,C dev show IFACE -> rc=0 但输出完全为空。-t 对 dev show 无效！
+# 3. 正确姿势: nmcli -f A,B,C dev show IFACE (无 -t) -> 'KEY:  value' 定宽对齐
+# 4. nmcli connection load FILE -> rc=0 但实际 result=fail, profile 根本没创建!
+#    原因: NM 只认 /etc/NetworkManager/system-connections/ 下的文件 + 权限/属主受限
+#    正确姿势: 直接写入 keyfiles 目录 + nmcli connection reload
+# 5. keyfile 里 type 必须是 'wifi'(不是 '802-11-wireless'), 否则 plugin 不认
+# 6. bssid 在 keyfile 里是分号十进制字节: 50:4F:3B:18:31:9B -> 80;79;59;24;49;155;
+# 7. ssid 明文可用(NM 存盘时才转 229;175;... 分号十进制, 读取时明文还原)
+# 8. SSID 含 '::' 之类序列不会破坏 -t 解析(因为转义发生在分隔符层)

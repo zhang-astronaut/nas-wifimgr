@@ -1,0 +1,115 @@
+// WiFi Manager 配置
+// 路径：/etc/wifimgr.json
+// 格式：JSONC（允许 // 与 /* */ 注释）。改完 systemctl restart wifimgr 生效。
+//
+// ⚠️ 本文件**不要**写任何密码。密码只存在 NetworkManager 的 keyfile 里
+//    （/etc/NetworkManager/system-connections/*.nmconnection，权限 0600 root）。
+
+{
+  "schema_version": 1,
+
+  "http": {
+    // 只监听回环，由 nginx 反代到 /wifi/。
+    // 这样管理面不直接暴露，同时复用 nginx 已有的入口。
+    "listen_host": "127.0.0.1",
+    "listen_port": 8791,
+    "url_prefix": "/wifi",
+    "body_max_bytes": 16384,
+    "server_header": false,
+
+    "csrf": {
+      "enabled": true,
+      "cookie_name": "wifimgr_csrf",
+      "header_name": "X-CSRF-Token",
+      // 额外锁死跨站。浏览器同源访问时 Origin/Referer 与 Host 一致。
+      "require_origin_match": true
+    }
+  },
+
+  "wifi": {
+    // rtl8188fu 的管理接口。注意：不要填 p2p0，NM 里还有一个 p2p0(wifi 类型)
+    // 会让扫描结果翻倍（实测 23 行 vs 11 行）。
+    "ifname": "wlan0",
+
+    // auto = 优先 NetworkManager，没有则回退 wpa_supplicant
+    "backend": "auto",
+
+    "scan": {
+      // NetworkManager 对重复 rescan 有速率限制，低于此间隔直接返回缓存
+      "min_interval_sec": 8,
+      "max_cached_sec": 45,
+      // rescan 是阻塞调用（实测 2-5s），要给足超时
+      "command_timeout_sec": 20,
+      // 空 SSID（隐藏 AP）在列表里的显示文案；后端仍保留空串
+      "hidden_ssid_label": "(隐藏网络)"
+    },
+
+    "connect": {
+      // nmcli connection up 在慢 AP 上可阻塞 30-45s
+      "command_timeout_sec": 60,
+      // 激活后等这么久再复查状态。
+      // 关键：密码错误时 nmcli 可能返回 rc=0（profile 激活成功、认证后台失败），
+      // 必须靠 settle + status 二次判定。
+      "settle_sec": 8,
+
+      // 实测结论（本机 rtl8188fu + wpa_supplicant 2.9 + 内核 4.4.35_ecoo）：
+      //   WPA2/WPA3 混合 AP 用 key-mgmt=wpa-psk 实测可连上并拿到 IP；
+      //   key-mgmt=sae 配置层能写入且回读正确，但真实握手必然
+      //   ssid-not-found 超时（25s）。
+      // 所以默认 psk 优先，不要改成 force_sae。
+      "sae_policy": "psk_first",
+
+      // 实测：nmcli connection load 会「假成功」（rc=0 但 result=fail，
+      // profile 根本没创建），所以直接写这个目录再 nmcli connection reload。
+      "keyfiles_dir": "/etc/NetworkManager/system-connections",
+      // 覆盖已有 profile 前先备份到这里，可回滚
+      "snapshot_dir": "/var/lib/wifimgr/keyfile-snapshots",
+      "snapshot_keep": 20
+    }
+  },
+
+  "daemon": {
+    "enabled": true,
+    "interval_sec": 60,
+    // 0 表示不限次数
+    "max_retries": 6,
+
+    "backoff": {
+      "base_sec": 5,
+      "factor": 2.0,
+      "cap_sec": 300,
+      "jitter": 0.2
+    },
+
+    // NM 处于 activating/deactivating 时一律不插手。
+    // nmcli con up 慢的时候状态是 activating，抢进去会打断进行中的四次握手。
+    "settle_grace_sec": 20,
+
+    // 连续 N 次健康后重置重试计数
+    "stable_cycles_to_reset": 2,
+
+    // 抖动检测：窗口内断连超阈值就暂停自动重连，防止把 AP 刷死
+    "flap_window_sec": 900,
+    "flap_threshold": 4,
+    "flap_pause_sec": 600,
+
+    "lockfile": "/run/wifimgr-daemon.lock",
+
+    // 留空 = 用当前活跃的 profile。
+    // 原因：遗留的 RD08_IoT 指向的 SSID 已经不存在了（那个 AP 现在叫
+    // 「密码是八个八wifi5」），写死它会让每轮白等 25s 还会抢掉真实连接。
+    "active_profile": "",
+    "fallback_profile": "",
+
+    // ★ 首次部署请保持 true，观察 10 分钟确认无误后再改 false。
+    // true = 只探测状态并记日志，不做任何重连动作。
+    "dry_run": true
+  },
+
+  "runtime": {
+    "data_dir": "/var/lib/wifimgr",
+    "event_retention_days": 30,
+    "max_attempt_rows": 2000,
+    "log_level": "info"
+  }
+}
