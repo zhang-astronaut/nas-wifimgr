@@ -528,6 +528,31 @@ rm /etc/wifimgr.json
 # 各 WiFi profile 需单独决定是否删除
 ```
 
+### 11.5.1 删除已保存的网络：会删掉什么
+
+面板上点「删除」会调用 `DELETE /api/v1/networks/<profile_name>`，它做两件事：
+
+1. 删掉 NetworkManager 里的 profile **keyfile（含密码）**
+2. 删掉应用数据库里的 `saved_network` 与 `profile_ref` 记录
+
+**不是**「只删应用记录、系统里的密码不动」。
+
+**正在使用的网络不允许删除** —— 后端会比对当前活跃 profile 名，
+命中就返回 `400 VALIDATION_FAILED`，不做任何改动。原因是实测教训：
+误删活跃 profile 会让 wlan0 立刻 `disconnected`，而守护线程紧接着重连时
+会把 profile 重建成 `key-mgmt=none` 的残骸状态（缺密码、无法连接），
+比删除前更难恢复。**要删请先切换到别的网络。**
+
+> 有线在这台机器上不受影响（`192.168.31.47` 走 eth0 且 eth0 是 unmanaged），
+> 所以这类误删不会导致 SSH 失联，但设备会失去无线回退能力。
+> 如果你这台机器的 IP 是**走WiFi** 的，务必先切换网络再删。
+
+若确实要在系统层删除某个 profile：
+
+```bash
+nmcli connection delete "<profile_name>"
+```
+
 ### 11.6 安全注意事项
 
 **密码存储模型**
@@ -585,6 +610,29 @@ alias nas='ssh -i ~/.ssh/id_ed25519_nas -o BatchMode=yes -o LogLevel=ERROR root@
 
 **大段脚本一律 `scp` 过去再执行，不要内联**。cmd → ssh 转义的坑：
 双引号内不能出现 `\"`；远端单引号内 `$()` 无需反斜杠；cmd 不展开 `$`。
+
+**从 Windows PowerShell 连这套机器时**（本次新增，踩了不少时间）：
+
+| 写法 | 结果 |
+|---|---|
+| `ssh root@NAS "cmd"` | 弹密码提示 —— 因为默认没有 `~/.ssh/id_ed25519` 这个名字的密钥 |
+| `ssh -i ~/.ssh/id_ed25519_nas -o BatchMode=yes root@NAS "cmd"` | 免密直连，**这是正确写法** |
+| `ssh ... "命令里含 `$(date +%Y%m%d)` 或反引号" | 反引号会被 PowerShell 先解析，报语法错 |
+| 命令里含 `%s` / `%{http_code}` / `%VAR%` | 被安全策略拦下，误判成 cmd 变量语法 |
+
+**结论：Python + PowerShell 组合下，复杂远端命令改用
+「heredoc 管道喂给 `python3 -`」**，可完全绕开shell 转义：
+
+```powershell
+$py = @'
+import json, urllib.request
+print(json.load(urllib.request.urlopen("http://127.0.0.1:8791/api/v1/status", timeout=10)))
+'@
+$py | ssh -i "$env:USERPROFILE\.ssh\id_ed25519_nas" -o BatchMode=yes root@192.168.31.47 "python3 -"
+```
+
+部署单文件时也建议用 Python 做「语法校验 → 备份 → 原子替换 → 回读校验」，
+不要写长 shell 命令 —— 换行转义在 PowerShell 里极易出错。
 
 ### 11.9 换设备 / 重装系统后
 
