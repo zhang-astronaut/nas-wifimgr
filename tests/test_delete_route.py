@@ -25,8 +25,9 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from wifimgr import config  # noqa: E402
-from wifimgr.api import Ctx, ScanCache  # noqa: E402
+from wifimgr.api import Ctx, ScanCache, delete_network  # noqa: E402
 from wifimgr.backends import fake as fake_mod  # noqa: E402
+from wifimgr.errors import AppError  # noqa: E402
 from wifimgr.httpd import Handler  # noqa: E402
 from wifimgr.security import CsrfGuard  # noqa: E402
 from wifimgr.store import Store  # noqa: E402
@@ -226,6 +227,95 @@ class TestDeleteNetworkRoute(unittest.TestCase):
         self.assertNotEqual(err.get("code"), "INTERNAL", "不该把非法名字漏到后端炸掉")
         # 确认没有在磁盘上产生 a/b 相关的副作用
         self.assertFalse(self.store.is_managed("a/b"))
+
+
+class TestDeleteActiveProtection(unittest.TestCase):
+    """删除当前正在使用的 profile 会直接掉线 WiFi —— 必须拦住。
+
+    这条保护是实机事故换来的：误删活跃 profile 后 wlan0 立刻 disconnected，
+    而守护线程会接着尝试重连，把 profile 重建成 key-mgmt=none 的坏状态，
+    反而比删除前更难恢复。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        cfg = config.load(None)
+        self.log = _Log()
+        self.store = Store(os.path.join(self.tmp.name, "t.db"))
+        self.backend = fake_mod.FakeBackend(cfg, self.log, scenario="connected")
+        self.backend.set_store(self.store)
+        self.ctx = Ctx(cfg, self.backend, self.store, self.log,
+                       guardian=None, scanner=ScanCache())
+        # FakeBackend 在 connected 场景下活跃 profile 就是这个名字
+        self.active = self.ctx.active_profile_name()
+        self.assertTrue(self.active, "FakeBackend 应能给出活跃 profile 名")
+
+    def tearDown(self):
+        self.store.close_all()
+        # Windows 上 sqlite 连接可能还被threadobject 持有，
+        # TemporaryDirectory.cleanup() 会因文件占用抛 WinError 32。
+        # 清理失败不该让测试失败 —— 临时目录由系统回收。
+        try:
+            self.tmp.cleanup()
+        except OSError:
+            pass
+
+    def _seed(self, name):
+        self.store.upsert_profile_ref(name, uuid="u", managed=True,
+                                      key_mgmt="wpa-psk", has_psk=True)
+        self.store.upsert_saved_network(profile_name=name, ssid="x",
+                                        key_mgmt="wpa-psk", security="WPA2")
+
+    def test_active_profile_cannot_be_deleted(self):
+        self._seed(self.active)
+        # 先把该 profile 放进 FakeBackend，这样「没被删」才有意义
+        self.backend._profiles[self.active] = {"psk": "x", "uuid": "u"}
+        with self.assertRaises(AppError) as cm:
+            delete_network(self.ctx, query={"profile_name": self.active})
+        self.assertEqual(cm.exception.code, "VALIDATION_FAILED")
+        self.assertIn("正在使用", cm.exception.message)
+        # 关键：什么都没被删
+        self.assertTrue(self.store.is_managed(self.active),
+                        "被拦下时不应删除数据库记录")
+        self.assertIn(self.active, self.backend._profiles,
+                      "被拦下时不应删除 NM profile")
+
+    def test_other_profile_still_deletable(self):
+        """保护不能误伤：非活跃的记录必须照常能删。"""
+        other = "另一个网络-1234"
+        self._seed(other)
+        self.backend._profiles[other] = {"psk": "x"}
+        status, payload = delete_network(self.ctx, query={"profile_name": other})
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["deleted"])
+        self.assertFalse(self.store.is_managed(other))
+
+    def test_status_failure_does_not_block_delete(self):
+        """取不到活跃 profile 时必须放行 —— 宁可误删也不要卡住用户。
+
+        取不到活跃信息是可能发生的（nmcli 超时、iw 缺失等）。
+        把删除完全堵死会让功能变成不可用。
+        """
+        self._seed("可删-9999")
+        self.backend._profiles["可删-9999"] = {"psk": "x"}
+
+        def boom():
+            raise RuntimeError("nmcli 超时")
+
+        self.backend.status = boom
+        status, payload = delete_network(self.ctx, query={"profile_name": "可删-9999"})
+        self.assertEqual(status, 200, "status 挂掉时不该阻塞删除")
+        self.assertTrue(payload["deleted"])
+
+    def test_no_active_profile_still_deletable(self):
+        """未连接时 active 为 None，任何 profile 都应可删。"""
+        self.backend._active = ""
+        self.backend.scenario = "disconnected"
+        name = "离线时的网络-1"
+        self._seed(name)
+        self.backend._profiles[name] = {"psk": "x"}
+        status, payload = delete_network(self.ctx, query={"profile_name": name})
+        self.assertEqual(status, 200)
 
 
 class TestMatchDeepUnit(unittest.TestCase):

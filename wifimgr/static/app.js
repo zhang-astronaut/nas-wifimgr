@@ -424,7 +424,11 @@
   }
 
   function removeNetwork(profileName) {
-    if (!confirm("删除已保存的 " + profileName + "？（仅删除记录，不动系统里的密码）")) return;
+    // 文案要说实话：后端会真的删掉 NetworkManager 里的 profile（含密码），
+    // 之前写的「不动系统里的密码」是错的，会误导用户。
+    if (!confirm("删除已保存的 " + profileName + "？\n\n" +
+                 "会同时删除系统里保存的该网络配置（含密码）。\n" +
+                 "如果它正是当前使用的网络，请先切换到别的网络。")) return;
     api("DELETE", "/networks/" + encodeURIComponent(profileName), {}).then(function () {
       toast("已删除", "ok");
       loadSaved();

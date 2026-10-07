@@ -30,6 +30,30 @@ class Ctx(object):
 
         return __version__
 
+    def active_profile_name(self):
+        """当前 wlan0 上活跃的 profile 名，取不到返回 None。
+
+        删除保护要用它：删掉正在用的 profile 会直接掉线。
+        任何异常都吞掉返回 None —— 取不到时宁可放行，也不要误拦用户。
+        """
+        backend = self.backend
+        fn = getattr(backend, "active_profile_name", None)
+        if callable(fn):
+            try:
+                return fn() or None
+            except Exception:
+                return None
+        try:
+            st = backend.status()
+        except Exception:
+            return None
+        # status() 返回的是 ConnStatus 对象（__slots__），不是 dict。
+        # 用 getattr 而不是 .get()，且两种形态都兼容。
+        name = getattr(st, "profile_name", None)
+        if name is None and isinstance(st, dict):
+            name = st.get("profile_name")
+        return name or None
+
 
 class ScanCache(object):
     """扫描结果缓存 + 限流。
@@ -332,6 +356,16 @@ def delete_network(ctx, body=None, query=None):
         raise ValidationError(
             "该 profile 不是本应用创建的，拒绝删除",
             detail={"profile": profile_name},
+        )
+    # 拒绝删除当前正在使用的 profile：delete_profile 会真的删掉 NM 的
+    # keyfile，wlan0 随即掉线。对有线（eth0 unmanaged）不影响 SSH，
+    # 但设备会失去无线回退能力，且守护线程会立刻尝试重连——实测会把
+    # profile 重建成 key-mgmt=none 的坏状态。宁可让用户先切换到别的网络。
+    if profile_name == ctx.active_profile_name():
+        raise ValidationError(
+            "这是当前正在使用的网络，删除会立即断开 WiFi。"
+            "请先切换到其他网络，或在系统网络设置里删除。",
+            detail={"profile": profile_name, "active": True},
         )
     removed = ctx.backend.delete_profile(profile_name)
     if ctx.store is not None:
