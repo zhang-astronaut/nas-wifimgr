@@ -330,6 +330,10 @@ def _match_deep(key):
                 return apimod.post_network_connect(ctx, body=body, query=q)
 
             return h
+
+    #删除。必须独立于上面的 POST 分支：曾经被误写在 `if method == "POST"`
+    # 之内，导致 DELETE 永远匹配不到、前端报「无此接口」(404)。
+    if method == "DELETE":
         m = re.match(r"^/api/v1/networks/([^/]+)$", path)
         if m:
             name = unquote(m.group(1))
