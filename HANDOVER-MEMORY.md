@@ -479,12 +479,20 @@ $py | ssh -i "$env:USERPROFILE\.ssh\id_ed25519_nas" -o BatchMode=yes root@192.16
 | SSH 横幅 | 每次连接都打印 OpenSSH 后量子 KEX 的 WARNING，干扰脚本解析 |
 | 系统字体 / locale | 远程输出中文常显示为乱码，**建议在Python 脚本里显式处理**：`x.encode("utf-8","replace").decode("utf-8","replace")` |
 
-### 8.4 WSL 环境
+### 8.4 WSL 环境（**已实测可用**）
 
 - 发行版：**Ubuntu 26.04.1 LTS**，WSL2，内核 `6.18.40.1-microsoft-standard-WSL2`
 - `/mnt/c` 可访问 → 仓库路径 `/mnt/c/Users/zhang/WorkBuddy/2026-10-08-00-21-03/nas-wifimgr/`
-- 在 WSL 里跑测试：`python3 tests/run_tests.py`（应该也全绿，但**注意 Windows
-  上是 skip 掉 flock 用例的**，WSL 上可能会真的跑）
+- **测试在 WSL 里实测通过**：`python3 tests/run_tests.py` →
+  `Ran 206 tests, OK (skipped=1)`
+
+**注意 skip 数量差异**：Windows 是 `skipped=2`，WSL/Linux 是 `skipped=1`。
+差的那一项是 **flock 相关用例**（`daemon.py` 里的文件锁）——
+Windows 上没有 `fcntl.flock` 所以 skip，Linux 上真的跑。
+**这是正常的，不是测试缺失。**
+
+如果你在 WSL 里改代码，测试会比 Windows 多覆盖一条 flock 逻辑，
+这是好事。
 
 ---
 
@@ -585,3 +593,20 @@ NAS 上的备份文件（回滚用）：
 *文档生成时间：2026-10-08 15:07*
 *对应 commit：`a1f73d5`（main 分支）*
 *本次会话共 4 个 commit / 53 文件 / 9591 行 / 206 项测试*
+
+---
+
+## 附录：本文档的自检方式
+
+如果你要验证这份文档是否可用：
+
+```bash
+# WSL 里
+cd /mnt/c/Users/zhang/WorkBuddy/2026-10-08-00-21-03/nas-wifimgr
+file HANDOVER-MEMORY.md          # 应显示 UTF-8 text
+python3 tests/run_tests.py       # 应 206 项全绿（skipped=1）
+git log --oneline -5             # 最后一个是 docs: 新增交接记忆文档
+```
+
+Windows PowerShell 里看中文会显示乱码，**那是控制台编码问题，
+不是文件问题**。用 WSL 或任意 UTF-8 编辑器打开即正常。
